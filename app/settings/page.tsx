@@ -19,7 +19,13 @@ import {
   Users,
   Eye,
   EyeOff,
+  Copy,
+  Key,
+  Activity,
+  X,
+  ShieldCheck,
 } from "lucide-react";
+import ActionDropdown from "@/components/ActionDropdown";
 
 export default function SettingsPage() {
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(null);
@@ -49,6 +55,73 @@ export default function SettingsPage() {
   // Diagnostic State
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+
+  // Admin Actions & Modals State
+  const [adminPasswordTarget, setAdminPasswordTarget] = useState<AdminUser | null>(null);
+  const [adminNewPassInput, setAdminNewPassInput] = useState("");
+  const [adminRoleTarget, setAdminRoleTarget] = useState<AdminUser | null>(null);
+  const [adminSelectedRole, setAdminSelectedRole] = useState<string>("admin");
+  const [adminDeleteTarget, setAdminDeleteTarget] = useState<AdminUser | null>(null);
+  const [adminActionSubmitting, setAdminActionSubmitting] = useState(false);
+  const [adminToast, setAdminToast] = useState<{ text: string; error?: boolean } | null>(null);
+
+  const showAdminToast = (text: string, error?: boolean) => {
+    setAdminToast({ text, error });
+    setTimeout(() => setAdminToast(null), 3000);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showAdminToast("Copied to clipboard!");
+  };
+
+  const handleConfirmAdminPasswordReset = async () => {
+    if (!adminPasswordTarget || adminNewPassInput.length < 6) return;
+    setAdminActionSubmitting(true);
+    try {
+      const targetId = adminPasswordTarget.id || (adminPasswordTarget as any)._id;
+      await adminApi.resetAdminPassword(targetId, adminNewPassInput);
+      showAdminToast(`Password for '${adminPasswordTarget.username}' reset successfully!`);
+      setAdminPasswordTarget(null);
+      setAdminNewPassInput("");
+    } catch (err: any) {
+      showAdminToast(err.message || "Failed to reset admin password", true);
+    } finally {
+      setAdminActionSubmitting(false);
+    }
+  };
+
+  const handleConfirmAdminRoleChange = async () => {
+    if (!adminRoleTarget) return;
+    setAdminActionSubmitting(true);
+    try {
+      const targetId = adminRoleTarget.id || (adminRoleTarget as any)._id;
+      await adminApi.updateAdminRole(targetId, adminSelectedRole);
+      showAdminToast(`Role for '${adminRoleTarget.username}' updated to ${adminSelectedRole}!`);
+      setAdminRoleTarget(null);
+      loadAdmins();
+    } catch (err: any) {
+      showAdminToast(err.message || "Failed to update admin role", true);
+    } finally {
+      setAdminActionSubmitting(false);
+    }
+  };
+
+  const handleConfirmAdminDelete = async () => {
+    if (!adminDeleteTarget) return;
+    setAdminActionSubmitting(true);
+    try {
+      const targetId = adminDeleteTarget.id || (adminDeleteTarget as any)._id;
+      await adminApi.deleteAdmin(targetId);
+      showAdminToast(`Admin account '${adminDeleteTarget.username}' deleted.`);
+      setAdminDeleteTarget(null);
+      loadAdmins();
+    } catch (err: any) {
+      showAdminToast(err.message || "Failed to delete admin", true);
+    } finally {
+      setAdminActionSubmitting(false);
+    }
+  };
 
   const loadInitialData = async () => {
     try {
@@ -536,18 +609,68 @@ export default function SettingsPage() {
                     <td className="py-3 px-4 text-zinc-400 text-[11px]" suppressHydrationWarning>
                       {adm.lastLogin ? new Date(adm.lastLogin).toLocaleString() : "Never"}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      {adm.role !== "super_admin" ? (
-                        <button
-                          onClick={() => handleDeleteAdmin(adm.id || (adm as any)._id, adm.username)}
-                          className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Delete Admin Account"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <span className="text-[10px] text-zinc-500 italic">Protected</span>
-                      )}
+                    <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end">
+                        <ActionDropdown
+                          buttonTitle={`Actions for ${adm.username}`}
+                          items={[
+                            {
+                              id: "copy-email",
+                              label: "Copy Email",
+                              icon: Copy,
+                              onClick: () => copyToClipboard(adm.email),
+                            },
+                            {
+                              id: "copy-id",
+                              label: "Copy Admin ID",
+                              icon: Copy,
+                              onClick: () => copyToClipboard(adm.id || (adm as any)._id),
+                              dividerAfter: adm.role !== "super_admin",
+                            },
+                            adm.role !== "super_admin"
+                              ? {
+                                  id: "change-role",
+                                  label: "Change Role",
+                                  description: `Current: ${adm.role}`,
+                                  icon: ShieldCheck,
+                                  onClick: () => {
+                                    setAdminRoleTarget(adm);
+                                    setAdminSelectedRole(adm.role);
+                                  },
+                                }
+                              : false,
+                            adm.role !== "super_admin"
+                              ? {
+                                  id: "reset-password",
+                                  label: "Reset Admin Password",
+                                  description: "Super Admin authorization",
+                                  icon: Key,
+                                  onClick: () => {
+                                    setAdminPasswordTarget(adm);
+                                    setAdminNewPassInput("");
+                                  },
+                                  dividerAfter: true,
+                                }
+                              : false,
+                            adm.role !== "super_admin"
+                              ? {
+                                  id: "delete-admin",
+                                  label: "Delete Admin Account",
+                                  description: "Revoke administrative privileges",
+                                  icon: Trash2,
+                                  danger: true,
+                                  onClick: () => setAdminDeleteTarget(adm),
+                                }
+                              : {
+                                  id: "protected",
+                                  label: "Protected Super Admin",
+                                  description: "Root master account",
+                                  icon: Shield,
+                                  disabled: true,
+                                },
+                          ]}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -615,6 +738,237 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* Admin Toast */}
+      {adminToast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl border text-xs flex items-center gap-2.5 shadow-2xl animate-in slide-in-from-bottom duration-200 ${
+            adminToast.error
+              ? "bg-rose-950/90 border-rose-500/40 text-rose-200"
+              : "bg-emerald-950/90 border-emerald-500/40 text-emerald-200"
+          }`}
+        >
+          {adminToast.error ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          )}
+          <span>{adminToast.text}</span>
+        </div>
+      )}
+
+      {/* MODAL 1: Reset Admin Password */}
+      {adminPasswordTarget && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setAdminPasswordTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-zinc-950 border border-white/[0.15] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                  <Key className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-white">Reset Admin Password</h3>
+              </div>
+              <button
+                onClick={() => setAdminPasswordTarget(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Set a new administrative password for operator{" "}
+              <strong className="text-white font-mono">@{adminPasswordTarget.username}</strong>.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] uppercase font-mono text-zinc-400">
+                New Password (minimum 6 characters)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={adminNewPassInput}
+                  onChange={(e) => setAdminNewPassInput(e.target.value)}
+                  placeholder="Enter new password..."
+                  className="w-full px-3 py-2 rounded-xl bg-black/60 border border-white/[0.1] text-white text-xs font-mono outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pass =
+                      "Admin@" + Math.random().toString(36).substring(2, 8) + "#";
+                    setAdminNewPassInput(pass);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] text-xs text-zinc-300 font-mono whitespace-nowrap cursor-pointer"
+                >
+                  Generate
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setAdminPasswordTarget(null)}
+                className="px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={adminActionSubmitting || adminNewPassInput.length < 6}
+                onClick={handleConfirmAdminPasswordReset}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/30 disabled:opacity-50 cursor-pointer"
+              >
+                {adminActionSubmitting ? "Updating..." : "Set Password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Change Admin Role */}
+      {adminRoleTarget && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setAdminRoleTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-zinc-950 border border-white/[0.15] p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-white">Update Admin Role</h3>
+              </div>
+              <button
+                onClick={() => setAdminRoleTarget(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Change the operational authority level for{" "}
+              <strong className="text-white font-mono">@{adminRoleTarget.username}</strong>.
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-[11px] uppercase font-mono text-zinc-400">Select Role</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAdminSelectedRole("admin")}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    adminSelectedRole === "admin"
+                      ? "bg-emerald-500/20 border-emerald-500/50 text-white"
+                      : "bg-white/[0.02] border-white/[0.08] text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <div className="font-semibold text-xs text-emerald-300">Admin</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Configuration & user operations</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAdminSelectedRole("moderator")}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    adminSelectedRole === "moderator"
+                      ? "bg-amber-500/20 border-amber-500/50 text-white"
+                      : "bg-white/[0.02] border-white/[0.08] text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <div className="font-semibold text-xs text-amber-300">Moderator</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">User moderation & read-only audits</div>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setAdminRoleTarget(null)}
+                className="px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={adminActionSubmitting}
+                onClick={handleConfirmAdminRoleChange}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+              >
+                {adminActionSubmitting ? "Updating..." : "Update Role"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: Delete Admin Modal */}
+      {adminDeleteTarget && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setAdminDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-zinc-950 border border-rose-500/30 p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between text-rose-400">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                <h3 className="text-base font-bold text-white">Delete Admin Operator?</h3>
+              </div>
+              <button
+                onClick={() => setAdminDeleteTarget(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300">
+              Are you sure you want to delete administrator{" "}
+              <strong className="text-white font-mono">@{adminDeleteTarget.username}</strong> (
+              {adminDeleteTarget.email})?
+            </p>
+
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300">
+              ⚠️ This will revoke their administrative credentials and access tokens immediately.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => setAdminDeleteTarget(null)}
+                className="px-3.5 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={adminActionSubmitting}
+                onClick={handleConfirmAdminDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 disabled:opacity-50 cursor-pointer"
+              >
+                {adminActionSubmitting ? "Deleting..." : "Delete Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

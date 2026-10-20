@@ -14,6 +14,8 @@ import {
   Settings,
   ShieldCheck,
   Radio,
+  Activity,
+  Clock,
 } from "lucide-react";
 
 interface NavItem {
@@ -26,6 +28,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "User API Activity", href: "/monitoring/activity", icon: Activity, badge: "Web + App", badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
+  { name: "Retention Policy", href: "/monitoring/retention", icon: Clock, badge: "15 Days", badgeColor: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
   { name: "Feature Flags", href: "/features", icon: Sliders, badge: "Live", badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
   { name: "Themes & Appearance", href: "/appearance", icon: Palette },
   { name: "Animated Background", href: "/animated-bg", icon: Sparkles },

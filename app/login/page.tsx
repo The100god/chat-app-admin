@@ -7,10 +7,10 @@ import { ShieldCheck, Lock, Mail, ArrowRight, AlertCircle, Sparkles, Eye, EyeOff
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const defaultEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "saurabhgoyal8055@gmail.com";
-  const defaultPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "Admin@123";
-  const [identifier, setIdentifier] = useState(defaultEmail);
-  const [password, setPassword] = useState(defaultPassword);
+  const rawAdminEmails = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "saurabhgoyal8055@gmail.com";
+  const primaryAdminEmail = rawAdminEmails.split(/[,\s;]+/)[0]?.trim() || "";
+  const [identifier, setIdentifier] = useState(primaryAdminEmail);
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +31,8 @@ export default function AdminLoginPage() {
     }
   };
 
-  const handleDemoLogin = () => {
-    setIdentifier(defaultEmail);
-    setPassword(defaultPassword);
+  const handleFillAdminEmail = () => {
+    setIdentifier(primaryAdminEmail);
   };
 
   return (
@@ -128,18 +127,18 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          {/* Quick Demo Credentials helper */}
+          {/* Authorized Admin Helper */}
           <div className="mt-6 pt-5 border-t border-white/[0.08] flex flex-col gap-2">
             <button
               type="button"
-              onClick={handleDemoLogin}
+              onClick={handleFillAdminEmail}
               className="flex items-center justify-center gap-2 text-xs text-zinc-400 hover:text-emerald-400 transition-colors py-1.5 px-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.05]"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Use Default Super-Admin Credentials</span>
+              <span>Fill Authorized Admin Email</span>
             </button>
             <p className="text-[11px] text-zinc-500 text-center">
-              Super Admin: {defaultEmail} / {defaultPassword}
+              Authorized Admin: {primaryAdminEmail}
             </p>
           </div>
         </div>

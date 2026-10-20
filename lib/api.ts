@@ -2,25 +2,23 @@
 
 export const getBackendUrl = (): string => {
   if (typeof window !== "undefined") {
-    const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-    if (envUrl && !envUrl.includes("172.22.176.1")) {
-      return envUrl;
-    }
     const host = window.location.hostname;
+    // If accessed via LAN IP or non-localhost, always route to that host on port 5001
     if (host && host !== "localhost" && host !== "127.0.0.1") {
       return `http://${host}:5001`;
+    }
+    const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (envUrl && !envUrl.includes("172.22.176.1") && envUrl !== "http://localhost:5001") {
+      return envUrl;
     }
     return "http://localhost:5001";
   }
   return process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001";
 };
 
-class DynamicApiBase {
-  toString(): string {
-    return getBackendUrl();
-  }
-}
-const API_BASE = new DynamicApiBase();
+const API_BASE = {
+  toString: () => getBackendUrl(),
+};
 
 export interface AdminUser {
   id: string;
@@ -58,6 +56,7 @@ export interface ThemeTokenSet {
   secondary: string;
   accent: string;
   muted: string;
+  mutedText?: string;
   card: string;
   border: string;
   bubbleSent: string;
@@ -126,6 +125,109 @@ export interface MobileAppConfig {
   pushSettings: {
     enabled: boolean;
     provider: string;
+  };
+}
+
+export interface UserApiActivityItem {
+  _id: string;
+  userId?: { _id: string; username: string; email: string; avatar?: string } | string;
+  username?: string;
+  userEmail?: string;
+  actorType: "user" | "admin" | "system" | "anonymous";
+  platform: "web" | "mobile" | "unknown";
+  clientPlatformHint?: string;
+  transport: "http" | "socket";
+  action: string;
+  method?: string;
+  route?: string;
+  statusCode?: number;
+  outcome: "success" | "failure";
+  durationMs?: number;
+  requestId: string;
+  sessionIdHash?: string;
+  installationIdHash?: string;
+  appVersion?: string;
+  browser?: string;
+  os?: string;
+  deviceType?: string;
+  ipAddress?: string;
+  errorCode?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface ActivityFilterParams {
+  page?: number;
+  limit?: number;
+  platform?: "all" | "web" | "mobile" | "unknown";
+  transport?: "all" | "http" | "socket";
+  outcome?: "all" | "success" | "failure";
+  action?: string;
+  method?: string;
+  statusCode?: number;
+  search?: string;
+  userId?: string;
+  startDate?: string;
+  endDate?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+export interface ActivityStats {
+  total24h: number;
+  total7d: number;
+  webCount24h: number;
+  mobileCount24h: number;
+  unknownCount24h: number;
+  failureCount24h: number;
+  failureRatePercent: string;
+  avgDurationMs: number;
+  topActions: { action: string; count: number }[];
+}
+
+export interface RetentionStats {
+  retentionPolicy: {
+    policyDays: number;
+    policyDurationMs: number;
+    isFixedMaximum: boolean;
+    description: string;
+    ttlEngineStatus: string;
+  };
+  collections: {
+    userApiActivity: {
+      name: string;
+      totalCount: number;
+      platformBreakdown: {
+        web: number;
+        mobile: number;
+        unknown: number;
+      };
+      ttlIndex: {
+        configured: boolean;
+        key: string;
+        expireAfterSeconds: number;
+        status: string;
+      };
+      oldestRecord: string | null;
+      newestRecord: string | null;
+      missingExpiryCount: number;
+      compliant: boolean;
+    };
+    adminAuditLog: {
+      name: string;
+      totalCount: number;
+      ttlIndex: {
+        configured: boolean;
+        key: string;
+        expireAfterSeconds: number;
+        status: string;
+      };
+      oldestRecord: string | null;
+      newestRecord: string | null;
+      missingExpiryCount: number;
+      compliant: boolean;
+    };
   };
 }
 
@@ -230,26 +332,12 @@ export const authenticatedFetch = async (
 // API Client Functions
 export const adminApi = {
   async ensureAuth(): Promise<string | null> {
-    let token = getStoredToken();
-    if (!token && typeof window !== "undefined") {
-      try {
-        const defaultEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "saurabhgoyal8055@gmail.com";
-        const defaultPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "Admin@123";
-        if (defaultEmail && defaultPassword) {
-          const loginData = await this.login(defaultEmail, defaultPassword);
-          if (loginData?.token) {
-            token = loginData.token;
-          }
-        }
-      } catch (e) {
-        console.warn("Auto-login fallback error:", e);
-      }
-    }
+    const token = getStoredToken();
     return token;
   },
 
   async login(identifier: string, password: string): Promise<{ success: boolean; token: string; admin: AdminUser }> {
-    const res = await fetch(`${API_BASE}/api/admin/auth/login`, {
+    const res = await fetch(`${getBackendUrl()}/api/admin/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier, password }),
@@ -269,7 +357,7 @@ export const adminApi = {
 
   async logout(): Promise<void> {
     try {
-      await fetch(`${API_BASE}/api/admin/auth/logout`, {
+      await fetch(`${getBackendUrl()}/api/admin/auth/logout`, {
         method: "POST",
         headers: getHeaders(),
         credentials: "include",
@@ -331,7 +419,7 @@ export const adminApi = {
 
     // Graceful fallback to public config endpoint
     try {
-      const pubRes = await fetch(`${API_BASE}/api/config/public`);
+      const pubRes = await fetch(`${getBackendUrl()}/api/config/public`);
       if (pubRes.ok) {
         const pubData = await pubRes.json();
         if (pubData.config && pubData.config[category]) {
@@ -340,6 +428,26 @@ export const adminApi = {
       }
     } catch (e) {
       console.warn("Public config fetch fallback error:", e);
+    }
+
+    // Spec Section 61: Fail-safe behavior with safe defaults
+    const safeDefaults: Record<string, any> = {
+      features: {
+        feature_chat_1on1: { name: "1-on-1 Chat", enabled: true, platform: "all", description: "Direct private messaging" },
+        feature_group_chat: { name: "Group Chat", enabled: true, platform: "all", description: "Multi-user group conversations" },
+        feature_voice_notes: { name: "Voice Messages", enabled: true, platform: "all", description: "Audio recording and playback" },
+        feature_media_sharing: { name: "Media & Attachments", enabled: true, platform: "all", description: "Images, videos, and files" },
+        feature_together_hub: { name: "Together Hub", enabled: true, platform: "all", description: "Shared activities & games" },
+        feature_animated_bg: { name: "Animated Background", enabled: true, platform: "all", description: "Floating emojis & custom text background" },
+        feature_app_lock: { name: "App Lock PIN", enabled: true, platform: "mobile", description: "Mobile security PIN and biometric lock" },
+        feature_calls_audio: { name: "Audio Calling", enabled: true, platform: "all", description: "Peer-to-peer WebRTC voice calls" },
+        feature_calls_video: { name: "Video Calling", enabled: true, platform: "all", description: "Peer-to-peer WebRTC video calls" },
+        maintenance_mode: { name: "Maintenance Mode", enabled: false, platform: "all", message: "System is undergoing maintenance." },
+      },
+    };
+
+    if (safeDefaults[category]) {
+      return safeDefaults[category] as T;
     }
 
     throw new Error(`Failed to fetch ${category}`);
@@ -448,6 +556,169 @@ export const adminApi = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Failed to delete admin");
+    return data;
+  },
+
+  async getActivityLogs(params: ActivityFilterParams = {}): Promise<{
+    activities: UserApiActivityItem[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== "") {
+        query.append(key, String(val));
+      }
+    });
+
+    const res = await authenticatedFetch(`/api/admin/activity?${query.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch activity logs");
+    return data;
+  },
+
+  async getActivityStats(): Promise<ActivityStats> {
+    const res = await authenticatedFetch("/api/admin/activity/stats");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch activity stats");
+    return data.stats;
+  },
+
+  async exportActivityLogs(params: ActivityFilterParams = {}, format: "csv" | "json" = "json"): Promise<any> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== "") {
+        query.append(key, String(val));
+      }
+    });
+    query.append("format", format);
+
+    const res = await authenticatedFetch(`/api/admin/activity/export?${query.toString()}`);
+    if (format === "csv") {
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `user_api_activity_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return { success: true };
+    }
+    const data = await res.json();
+    return data;
+  },
+
+  async getRetentionStats(): Promise<RetentionStats> {
+    const res = await authenticatedFetch("/api/admin/retention/stats");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch retention stats");
+    return data;
+  },
+
+  async verifyRetention(): Promise<{ success: boolean; message: string; results: any }> {
+    const res = await authenticatedFetch("/api/admin/retention/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to verify retention policy");
+    return data;
+  },
+  async deleteActivityLog(id: string): Promise<{ success: boolean; message: string; deletedId: string }> {
+    const res = await authenticatedFetch(`/api/admin/activity/${id}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to delete activity log");
+    return data;
+  },
+
+  async bulkDeleteActivities(ids: string[]): Promise<{ success: boolean; message: string; deletedCount: number }> {
+    const res = await authenticatedFetch("/api/admin/activity/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to bulk delete activity logs");
+    return data;
+  },
+
+  async getUserById(id: string): Promise<{ success: boolean; user: any }> {
+    const res = await authenticatedFetch(`/api/admin/users/${id}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to fetch user details");
+    return data;
+  },
+
+  async updateUserStatus(
+    id: string,
+    updates: { isSuspended?: boolean; suspendedReason?: string; isVerified?: boolean }
+  ): Promise<{ success: boolean; message: string; user: any }> {
+    const res = await authenticatedFetch(`/api/admin/users/${id}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to update user status");
+    return data;
+  },
+
+  async updateUserProfile(
+    id: string,
+    updates: { name?: string; about?: string }
+  ): Promise<{ success: boolean; message: string; user: any }> {
+    const res = await authenticatedFetch(`/api/admin/users/${id}/profile`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to update user profile");
+    return data;
+  },
+
+  async resetUserPassword(id: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const res = await authenticatedFetch(`/api/admin/users/${id}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to reset user password");
+    return data;
+  },
+
+  async deleteUser(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await authenticatedFetch(`/api/admin/users/${id}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to delete user");
+    return data;
+  },
+
+  async updateAdminRole(id: string, role: string): Promise<{ success: boolean; message: string; admin: any }> {
+    const res = await authenticatedFetch(`/api/admin/admins/${id}/role`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to update admin role");
+    return data;
+  },
+
+  async resetAdminPassword(id: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const res = await authenticatedFetch(`/api/admin/admins/${id}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to reset admin password");
     return data;
   },
 };
