@@ -16,6 +16,7 @@ import {
   Radio,
   Activity,
   Clock,
+  Trophy,
 } from "lucide-react";
 
 interface NavItem {
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { name: "Themes & Appearance", href: "/appearance", icon: Palette },
   { name: "Animated Background", href: "/animated-bg", icon: Sparkles },
   { name: "Together & Games", href: "/together", icon: Gamepad2, badge: "7 Games", badgeColor: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
+  { name: "Progression & Levels", href: "/together/gamification", icon: Trophy, badge: "Lvl 1-20", badgeColor: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
   { name: "Mobile Management", href: "/mobile", icon: Smartphone, badge: "App Lock", badgeColor: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
   { name: "Users & Moderation", href: "/users", icon: Users },
   { name: "Audit Trail", href: "/audit", icon: ScrollText },

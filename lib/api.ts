@@ -108,6 +108,113 @@ export interface CoupleActivityItem {
   totalQuestions: number;
 }
 
+export interface CourtyardObstacle {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  type?: string;
+}
+
+export interface CourtyardLayout {
+  preset: string;
+  obstacles: CourtyardObstacle[];
+  catcherSpeed: number;
+  runnerSpeed: number;
+  powerUpSpawnRateSec?: number;
+}
+
+export interface GameLevelConfig {
+  level: number;
+  title: string;
+  description?: string;
+  timeSec: number;
+  gridConfig: any;
+  courtyardLayout: CourtyardLayout;
+  rewards: {
+    participationPoints: number;
+    winBonusPoints: number;
+  };
+}
+
+export interface GameGamificationConfigItem {
+  _id?: string;
+  gameId: string;
+  title: string;
+  category: "classic" | "casual" | "mind" | "action" | "creative";
+  icon: string;
+  description?: string;
+  isStarter: boolean;
+  enabled: boolean;
+  order: number;
+  rules: {
+    participationPoints: number;
+    winBonusPoints: number;
+    streakBonusMultiplier: number;
+    requiredEligiblePlaySec: number;
+    minMovesBeforeComplete: number;
+  };
+  unlockRequirements: {
+    pointsRequired: number;
+    requiredPreviousGames: {
+      gameId: string;
+      minWins: number;
+      minPlays: number;
+    }[];
+  };
+  startingLevel: number;
+  maximumLevel: number;
+  levelConfigs: GameLevelConfig[];
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface GamificationVersionItem {
+  _id?: string;
+  version: number;
+  status: "draft" | "published" | "archived";
+  publishedAt?: string;
+  publishedBy?: string;
+  changelog?: string;
+}
+
+export interface GamificationUserItem {
+  _id: string;
+  username: string;
+  name: string;
+  email?: string;
+  profilePic?: string;
+}
+
+export interface GamificationPairItem {
+  pairId: string;
+  displayName: string;
+  totalPoints: number;
+  totalWins: number;
+  currentStreak: number;
+  userA: GamificationUserItem;
+  userB: GamificationUserItem;
+  updatedAt?: string;
+}
+
+export interface PointTransactionItem {
+  _id?: string;
+  transactionId: string;
+  matchId: string;
+  pairId: string;
+  userId: string;
+  userName?: string;
+  userUsername?: string;
+  userEmail?: string;
+  pairNames?: string;
+  gameId: string;
+  type: string;
+  points: number;
+  levelAtMatch: number;
+  metadata?: any;
+  createdAt: string;
+}
+
 export interface MobileAppConfig {
   minSupportedVersion: string;
   latestVersion: string;
@@ -720,5 +827,130 @@ export const adminApi = {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Failed to reset admin password");
     return data;
+  },
+
+  // Gamification & Progression Center
+  async getGamificationConfig(): Promise<{
+    configs: GameGamificationConfigItem[];
+    activeVersion: number;
+    totalGames: number;
+  }> {
+    const res = await authenticatedFetch("/api/admin/gamification/config");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to fetch gamification config");
+    return data.data;
+  },
+
+  async updateGameGamification(
+    gameId: string,
+    updates: Partial<GameGamificationConfigItem>
+  ): Promise<GameGamificationConfigItem> {
+    const res = await authenticatedFetch(`/api/admin/gamification/games/${gameId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to update game gamification");
+    return data.data;
+  },
+
+  async generateDifficultyCurve(
+    gameId: string,
+    baseTimeSec: number = 30
+  ): Promise<GameLevelConfig[]> {
+    const res = await authenticatedFetch(
+      `/api/admin/gamification/games/${gameId}/generate-curve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseTimeSec }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to generate curve");
+    return data.data;
+  },
+
+  async publishGamificationConfig(changelog: string): Promise<any> {
+    const res = await authenticatedFetch("/api/admin/gamification/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ changelog }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to publish gamification config");
+    return data.data;
+  },
+
+  async getGamificationVersions(): Promise<GamificationVersionItem[]> {
+    const res = await authenticatedFetch("/api/admin/gamification/versions");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to fetch versions");
+    return data.data;
+  },
+
+  async rollbackGamificationVersion(version: number): Promise<any> {
+    const res = await authenticatedFetch(`/api/admin/gamification/rollback/${version}`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to rollback version");
+    return data.data;
+  },
+
+  async getGamificationLedger(params?: {
+    page?: number;
+    limit?: number;
+    pairId?: string;
+    userId?: string;
+    gameId?: string;
+    type?: string;
+  }): Promise<{
+    transactions: PointTransactionItem[];
+    total: number;
+    page: number;
+    pages: number;
+  }> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.pairId) query.set("pairId", params.pairId);
+    if (params?.userId) query.set("userId", params.userId);
+    if (params?.gameId) query.set("gameId", params.gameId);
+    if (params?.type) query.set("type", params.type);
+
+    const res = await authenticatedFetch(
+      `/api/admin/gamification/ledger?${query.toString()}`
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to fetch points ledger");
+    return data.data;
+  },
+
+  async adjustPoints(payload: {
+    pairId: string;
+    userId: string;
+    points: number;
+    reason?: string;
+  }): Promise<any> {
+    const res = await authenticatedFetch("/api/admin/gamification/adjust-points", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to adjust points");
+    return data.data;
+  },
+
+  async getGamificationPairsAndUsers(): Promise<{
+    pairs: GamificationPairItem[];
+    users: GamificationUserItem[];
+  }> {
+    const res = await authenticatedFetch("/api/admin/gamification/pairs-and-users");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to fetch pairs and users");
+    return data.data;
   },
 };
