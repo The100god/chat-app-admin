@@ -18,11 +18,19 @@ import {
   Database,
   ArrowUpRight,
   ShieldAlert,
+  FileJson,
+  X,
+  Download,
+  Copy,
+  Check,
 } from "lucide-react";
+import AuditFeedItem from "@/components/AuditFeedItem";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [selectedAuditLog, setSelectedAuditLog] = useState<any | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
@@ -301,26 +309,12 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {auditLogs.length > 0 ? (
               auditLogs.map((log) => (
-                <div
+                <AuditFeedItem
                   key={log._id || Math.random()}
-                  className="flex items-start justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.05] text-xs"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">{log.action}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-mono bg-white/[0.06] text-zinc-300">
-                        {log.category}
-                      </span>
-                    </div>
-                    <p className="text-zinc-400 mt-1">
-                      {log.details?.summary || JSON.stringify(log.details)}
-                    </p>
-                  </div>
-                  <div className="text-right text-[11px] text-zinc-500 whitespace-nowrap">
-                    <div>{log.adminEmail}</div>
-                    <div suppressHydrationWarning>{new Date(log.createdAt).toLocaleTimeString()}</div>
-                  </div>
-                </div>
+                  log={log}
+                  showLinkToAudit={true}
+                  onInspect={(item) => setSelectedAuditLog(item)}
+                />
               ))
             ) : (
               <p className="text-xs text-zinc-500 py-6 text-center">
@@ -330,6 +324,113 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Inspect Audit Log Modal */}
+      {selectedAuditLog && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setSelectedAuditLog(null)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-zinc-950 border border-white/[0.15] p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <FileJson className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-mono">
+                    {selectedAuditLog.action}
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Category: <span className="text-white font-mono">{selectedAuditLog.category}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const dataStr =
+                      "data:text/json;charset=utf-8," +
+                      encodeURIComponent(JSON.stringify(selectedAuditLog, null, 2));
+                    const downloadAnchor = document.createElement("a");
+                    downloadAnchor.setAttribute("href", dataStr);
+                    downloadAnchor.setAttribute(
+                      "download",
+                      `audit-${selectedAuditLog.action}-${Date.now()}.json`
+                    );
+                    document.body.appendChild(downloadAnchor);
+                    downloadAnchor.click();
+                    downloadAnchor.remove();
+                  }}
+                  className="p-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download JSON"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </button>
+                <button
+                  onClick={() => setSelectedAuditLog(null)}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metadata */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                <div className="text-[10px] uppercase font-mono text-zinc-500">Operator</div>
+                <div className="font-mono text-zinc-300 truncate mt-0.5">
+                  {selectedAuditLog.adminEmail}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                <div className="text-[10px] uppercase font-mono text-zinc-500">Timestamp</div>
+                <div className="font-mono text-zinc-300 truncate mt-0.5" suppressHydrationWarning>
+                  {new Date(selectedAuditLog.createdAt).toLocaleString()}
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] col-span-2 sm:col-span-1">
+                <div className="text-[10px] uppercase font-mono text-zinc-500">Audit ID</div>
+                <div className="font-mono text-zinc-300 truncate mt-0.5">
+                  {selectedAuditLog._id || "N/A"}
+                </div>
+              </div>
+            </div>
+
+            {/* Formatted JSON Payload */}
+            <div className="flex-1 overflow-y-auto rounded-xl bg-black/60 border border-white/[0.08] p-4 font-mono text-xs text-emerald-300/90 leading-relaxed">
+              <pre className="whitespace-pre-wrap">
+                {JSON.stringify(selectedAuditLog, null, 2)}
+              </pre>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-xs">
+              <span className="text-zinc-500">Cryptographically verifiable event log</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(selectedAuditLog, null, 2));
+                  setCopiedKey("modal_json");
+                  setTimeout(() => setCopiedKey(null), 2000);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {copiedKey === "modal_json" ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                <span>{copiedKey === "modal_json" ? "Copied!" : "Copy Raw JSON"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

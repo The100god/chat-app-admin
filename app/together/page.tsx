@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import AdminLayout from "@/components/AdminLayout";
 import { adminApi, TogetherGameItem, CoupleActivityItem } from "@/lib/api";
 import {
@@ -112,6 +113,33 @@ export default function TogetherPage() {
             </>
           )}
         </button>
+      </div>
+
+      {/* Gamification & Progression Center Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
+            <Trophy className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              Gamification, Progression & Level Matrices (1–20)
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                New Engine
+              </span>
+            </h3>
+            <p className="text-xs text-zinc-300">
+              Manage pair-bound unlocking, starter game rule, time, grid sizes, and dynamic courtyard obstacle maps for all 20 levels.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/together/gamification"
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors whitespace-nowrap shadow-lg shadow-amber-500/20"
+        >
+          Open Gamification Center &rarr;
+        </Link>
       </div>
 
       {/* 7 Multiplayer Games Section */}
